@@ -27,8 +27,6 @@ import scipy.sparse as sp
 import h5py
 # from scipy.interpolate import interp1d
 from docplex.mp.model import Model
-from docplex.mp.solution import SolveSolution
-from docplex.mp.progress import *
 # from docplex.util.environment import get_environment
 
 def get_h5py_struct_array_value(f, structname, fieldname, idx):
@@ -43,8 +41,6 @@ def build_var_agulhas(agulhas):
     # Variáveis do modelo 
     t = mdl.continuous_var_list(agulhas, lb = 0, name='t')
     print("Variaveis de tempo criada")
-    
-    #mdl.add_sos2(t)
     return t
 
 def build_var_custos(pontos, Name):
@@ -62,121 +58,6 @@ def func_obj(c,pontos):
             fo = fo + (c[s][i]/pontos[s])
             vetor_iteracao.append(k+1)
     return fo
-
-def func_obj_reduzida(c,pontos,k):
-    fo = 0
-    for s in range(len(c)):
-        for i in range(k):
-            fo = fo + (c[s][i]/pontos[s])
-    return fo
-
-def func_obj_tecido(c,pontos,s):
-    fo = 0
-    for i in range(pontos[s]):
-        fo = fo + (c[s][i]/pontos[s])
-    return fo
-
-def resolve_tecido(Dma,Dmi,d,Mma,Mmi,t,c,s=0):
-    '''
-    Parameters
-    ----------
-    Dma : List
-        Lista de dose máxima permitida.
-    Dmi : List
-        Lista de dose minima permitida.
-    d : Matrix
-        Matriz de todas as doses de todos os tecidos.
-    Mma : List
-        Penalidade maxima.
-    Mmi : List
-        Penalidade minima.
-    t : List Variables
-        Lista de variaveis de tempo de permanência das sementes.
-    c : List
-        Lista de variaveis de custo.
-    s : Int
-        Tecido desejado
-    Returns
-    -------
-    None.
-
-    '''
-    for i in range(len(c[s])):
-        soma_interna_min = mdl.sum(Mmi[s]*d[s][i,j]*t[j] for j in range(len(t)))
-        soma_interna_max = mdl.sum(Mma[s]*d[s][i,j]*t[j] for j in range(len(t)))
-        stmi = mdl.sum(c[s][i] + soma_interna_min)
-        stma = mdl.sum(c[s][i] - soma_interna_max)
-        mdl.add_constraint( stmi >= Mmi[s]*Dmi[s])
-        mdl.add_constraint( stma >= -Mma[s]*Dma[s])  
-            
-    print("######### Modelo Para Um Tecido #########")
-    # Função Objetivo
-    fo = func_obj_tecido(c, pontos_full,s)
-    print("Função Objetivo Criada")
-    # Solução 
-    mdl.minimize(fo)    
-    solution = mdl.solve()
-    '''
-    print("Número de variáveis = ", mdl.number_of_variables)
-    if solution:
-        print("Tem solução")
-        print(mdl.solve_details)
-        print(mdl.print_solution())
-    else:
-        print("Não tem Solução")
-    '''    
-    return t, c, solution
-    
-def resolve_reduzido(Dma,Dmi,d,Mma,Mmi,t,c,k=5):
-    '''
-    Parameters
-    ----------
-    Dma : List
-        Lista de dose máxima permitida.
-    Dmi : List
-        Lista de dose minima permitida.
-    d : Matrix
-        Matriz de todas as doses de todos os tecidos.
-    Mma : List
-        Penalidade maxima.
-    Mmi : List
-        Penalidade minima.
-    t : List Variables
-        Lista de variaveis de tempo de permanência das sementes.
-    c : List
-        Lista de variaveis de custo.
-    i : Int
-        Numero de pontos a serem analisado.
-    Returns
-    -------
-    None.
-
-    '''
-    for s in range(len(c)):
-        for i in range(k):
-            soma_interna_min = mdl.sum(Mmi[s]*d[s][i,j]*t[j] for j in range(len(t)))
-            soma_interna_max = mdl.sum(Mma[s]*d[s][i,j]*t[j] for j in range(len(t)))
-            stmi = mdl.sum(c[s][i] + soma_interna_min)
-            stma = mdl.sum(c[s][i] - soma_interna_max)
-            mdl.add_constraint( stmi >= Mmi[s]*Dmi[s])
-            mdl.add_constraint( stma >= -Mma[s]*Dma[s])  
-            
-    print("######### Modelo Reduzido #########")
-    # Função Objetivo
-    fo = func_obj_reduzida(c, pontos_full,k)
-    print("Função Objetivo Criada")
-    # Solução 
-    mdl.minimize(fo)    
-    solution = mdl.solve()
-    print("Número de variáveis = ", mdl.number_of_variables)
-    if solution:
-        print("Tem solução")
-        print(mdl.solve_details)
-        print(mdl.print_solution())
-    else:
-        print("Não tem Solução")
-    
-    return t, c, solution
 
 def build_BATD_exact(Dma,Dmi,d,Mma,Mmi,t,c):
     '''
@@ -228,60 +109,6 @@ def build_BATD_exact(Dma,Dmi,d,Mma,Mmi,t,c):
     
     return t, c, solution
 
-def slack_variable(pontos):
-   x = mdl.continuous_var_list(pontos, lb = 0)
-   return x
-            
-            
-def build_BATD_custo_alterado(Dma,Dmi,d,Mma,Mmi,t,c,slack_max,slack_min):
-    '''
-     Parameters
-    ----------
-    Dma : List
-        Lista de dose máxima permitida.
-    Dmi : List
-        Lista de dose minima permitida.
-    d : Matrix
-        Matriz de todas as doses de todos os tecidos.
-    Mma : List
-        Penalidade maxima.
-    Mmi : List
-        Penalidade minima.
-    t : List Variables
-        Lista de variaveis de tempo de permanência das sementes.
-    c : List
-        Lista de variaveis de custo.
-        
-    Returns
-    -------
-    Tempo, custo, solução
-
-    '''
-    for s in range(len(c)):
-        for i in range(len(c[s])):
-            soma_interna_min = mdl.sum(Mmi[s]*d[s][i,j]*t[j] for j in range(len(t)))
-            soma_interna_max = mdl.sum(Mma[s]*d[s][i,j]*t[j] for j in range(len(t)))
-            stmi = c[s][i] + soma_interna_min - slack_min[s][i]
-            stma = c[s][i] - soma_interna_max - slack_max[s][i]
-            mdl.add_constraint( stmi == Mmi[s]*Dmi[s])
-            mdl.add_constraint( stma == -Mma[s]*Dma[s]) 
-    
-    print("######### Modelo Completo #########")
-    # Função Objetivo
-    fo = func_obj(c, pontos_full)
-    print("Função Objetivo Criada")
-    # Solução 
-    mdl.minimize(fo)    
-    solution = mdl.solve()
-    print("Número de variáveis = ", mdl.number_of_variables)
-    if solution:
-        print("Tem solução")
-        print(mdl.solve_details)
-        print(mdl.print_solution())
-    else:
-        print("Não tem Solução")  
-    
-    return t, c, solution
     
 def plota_custo(custo):
     label_custo = []
@@ -302,7 +129,7 @@ def plota_custo(custo):
     plt.show()
     
 
-def plota_dose(d,t):
+def plota_dose(d,t,caso):
     '''Função que calcula a dose depositada em cada ponto i em cada tecido s'''
     dose_total = []
     ponto_total = []
@@ -313,7 +140,7 @@ def plota_dose(d,t):
         dose_tecido = []
         for i in range(ponto):
             for j in range(agulha):
-                soma = soma + (d[s][i,j]*t[j]/60)
+                soma = soma + (d[s][i,j]*t[j])
             dose_tecido.append(soma)
             soma = 0
         dose_total.append(dose_tecido)
@@ -323,78 +150,27 @@ def plota_dose(d,t):
     dose = []
     for i in range(len(d)):
         dose.append(sum(dose_total[i]))
+        print("Dose total do tecido:" + str(dose[i]))
         
     plt.bar(tecido, dose, color = 'red', width=1)
     plt.xticks(rotation = 45)
-    
-    '''
-    label_ponto = [j for j in range(ponto_total[0])]
-    plt.plot(label_ponto,dose_total[0], color='red', label = 'Uretra')
-    label_ponto = [j for j in range(ponto_total[1])]
-    plt.plot(label_ponto,dose_total[1], color='green', label = 'Reto')
-    label_ponto = [j for j in range(ponto_total[2])]
-    plt.plot(label_ponto,dose_total[2], color='blue', label = 'Bexiga')
-    label_ponto = [j for j in range(ponto_total[3])]
-    plt.plot(label_ponto,dose_total[3], color='orange', label = 'Próstata')
-    label_ponto = [j for j in range(ponto_total[4])]
-    plt.plot(label_ponto,dose_total[4], color='black', label = 'Bexiga Parcial')
-    label_ponto = [j for j in range(ponto_total[5])]
-    plt.plot(label_ponto,dose_total[5], color='yellow', label = 'Reto Parcial')
-    label_ponto = [j for j in range(ponto_total[6])]
-    plt.plot(label_ponto,dose_total[6], color='brown', label = 'Tecido Saudável')
-    '''
     plt.xlabel('Tecido')
     plt.ylabel('Dose cGy')
-    plt.title('Distribuição de dose por tecido - caso 25')
+    plt.title('Distribuição de dose por tecido - caso' + str(caso))
     plt.legend()
-    plt.show()
+    plt.savefig('DistrDoseCaso' + str(caso))
     
     return dose
 
-def plota_tempo(t):
+def plota_tempo(t,caso):
     label_t = [j for j in range(agulhas)]
     plt.bar(label_t,t,color = 'blue')
     plt.xlabel('Semente')
     plt.ylabel('Tempo (s)')
-    plt.title('Comparação do tempo de permanência de cada semente - caso 01')
+    plt.title('Comparação do tempo de permanência de cada semente - caso' + str(caso))
     plt.legend()
     plt.show()
 
-    
-def compara_tempo(t,t_ca):
-    label_t = [j for j in range(agulhas)]
-    plt.bar(label_t,t,color = 'blue', label = 'Modelo Alterovitz')
-    plt.bar(label_t,t_ca,color = 'red', label = 'Modelo Holm')
-    plt.xlabel('Semente')
-    plt.ylabel('Tempo (s)')
-    plt.title('Comparação do tempo de permanência de cada semente - caso 01')
-    plt.legend()
-    plt.show()
-
-def obj_moren(w,q,x,p,d,target):
-    fo = 0
-    soma3 = 0
-    descarte, ponto_target = d[target].shape()
-    soma1 = mdl.sum(w[i] for i in range(ponto_target))
-    soma1 = p*soma1
-    soma2 = mdl.sum(q)
-    
-def modelo_moren(d,t,p,q,L,U,M,target):
-    w = 0
-    x = 0
-    for i in range(len(d[target])):
-        if sum(d[target][i,j] for j in range(len(t))) < L:
-            w += 1
-            
-    for s in range(len(d)):
-        if sum(d[s][i,j] for j in range(len(t))) > U:   
-            x += 1
-            
-    w = mdl.continuous_var_list(w)
-    x = mdl.continuous_var_list(x)
-    
-    
-    
     
     
 # =============================================================================
@@ -422,6 +198,7 @@ s = 7 #numero de tecidos
 # Leitura do arquivo de entrada
 # =============================================================================
 
+caso = 1
 filename = '/home/gabriel/Facul/IC/modelo_ic/Data/Prostate_BT_01.mat' # Arquivo de entrada
 f = h5py.File(filename)
 
@@ -603,7 +380,8 @@ for i in range(len(f['problem']['dataID'])):
             
         del DT, col_ind, row_ind
    
-del f, i, data_id, is_constraint, minimize, weight, bound, factor, num_voxels        
+del f, i, data_id, is_constraint, minimize, weight, bound, factor, num_voxels  
+
 # =============================================================================
 # Matrizes de pontos de dose em cada tecido
 # =============================================================================      
@@ -648,6 +426,7 @@ prostate_dense = prostate_dense*(-1)
 del bla, blad_part, naoesp, prostate, rec,rec_part,ure
 
 # Cria as variaveis de tempo
+
 descarte, agulhas = ure_dense.shape
 t = build_var_agulhas(agulhas)
 
@@ -695,132 +474,34 @@ matriz_dose_full.append(blad_dense)
 matriz_dose_full.append(rec_dense)
 matriz_dose_full.append(naoesp_dense)
 
-'''
-# =============================================================================
-# Matriz de dos de teste
-# =============================================================================
-
-matriz_dose_half = []
-matriz_dose_half.append(ure_dense)
-matriz_dose_half.append(prostate_dense)
-matriz_dose_half.append(blad_dense)
-matriz_dose_half.append(rec_dense)
-matriz_dose_half.append(naoesp_dense)
-'''
-# Variaveis de Custo e slack
-c = []
-slack_max = []
-slack_min = []
+c =[]
 
 c_ure = build_var_custos(pontos_ure,"U") #uretra
-slack_max_ure = slack_variable(pontos_ure)
-slack_min_ure = slack_variable(pontos_ure)
-
 c_rec_part = build_var_custos(pontos_rec_part,"RP") #reto parcial
-slack_max_rec_part = slack_variable(pontos_rec_part)
-slack_min_rec_part = slack_variable(pontos_rec_part)
-
 c_blad_part = build_var_custos(pontos_blad_part, "BP") #bexiga parcial
-slack_max_blad_part = slack_variable(pontos_blad_part)
-slack_min_blad_part = slack_variable(pontos_blad_part) 
-
 c_prostate = build_var_custos(pontos_prostate, "P") # prostata
-slack_max_prostate = slack_variable(pontos_prostate)
-slack_min_prostate = slack_variable(pontos_prostate)
-
 c_blad = build_var_custos(pontos_blad, "B") #bexiga
-slack_max_blad = slack_variable(pontos_blad)
-slack_min_blad = slack_variable(pontos_blad)
-
 c_rec = build_var_custos(pontos_rec, "R") #reto
-slack_max_rec = slack_variable(pontos_rec)
-slack_min_rec = slack_variable(pontos_rec) 
-
 c_naoesp = build_var_custos(pontos_naoesp, "S") #saudavel
-slack_max_naoesp = slack_variable(pontos_naoesp)
-slack_min_naoesp = slack_variable(pontos_naoesp)
 
 c.append(c_ure)
-slack_max.append(slack_max_ure)
-slack_min.append(slack_min_ure)
-
 c.append(c_rec_part)
-slack_max.append(slack_max_rec_part)
-slack_min.append(slack_min_rec_part)
-
 c.append(c_blad_part)
-slack_max.append(slack_max_blad_part)
-slack_min.append(slack_min_blad_part)
-
 c.append(c_prostate)
-slack_max.append(slack_max_prostate)
-slack_min.append(slack_min_prostate)
-
 c.append(c_blad)
-slack_max.append(slack_max_blad)
-slack_min.append(slack_min_blad)
-
 c.append(c_rec)
-slack_max.append(slack_max_rec)
-slack_min.append(slack_min_rec)
-
 c.append(c_naoesp)
-slack_max.append(slack_max_naoesp)
-slack_min.append(slack_min_naoesp)
 
 del pontos_blad, pontos_blad_part, pontos_naoesp, pontos_prostate, pontos_rec, pontos_rec_part, pontos_ure
-'''
-tempo, custo, solution = resolve_reduzido(Dmax, Dmin, matriz_dose_full, Mmax, Mmin, t, c, 10)
-#plt.scatter(label_t,tempo, color='red', label = 'i = 10')
-#plota_custo(custo)
 
-tempo, custo, solution = resolve_reduzido(Dmax, Dmin, matriz_dose_full, Mmax, Mmin, t, c, 100)
-#plt.scatter(label_t,tempo, color='green', label = 'i = 100')
-plota_custo(custo)
 
-tempo, custo, solution = resolve_reduzido(Dmax, Dmin, matriz_dose_full, Mmax, Mmin, t, c, 2466)
-#plt.scatter(label_t,tempo, color='blue', label = 'i = 2466')
-plota_custo(custo)
-'''
-
-tempo, custo, solution = build_BATD_exact(DmaxA, DminA, matriz_dose_full, MmaxA, MminA, t, c)
+t, custo, solution = build_BATD_exact(DmaxA, DminA, matriz_dose_full, MmaxA, MminA, t, c)
 #tempo_ca, custo_ca, solution_ca = build_BATD_custo_alterado(DmaxA, DminA, matriz_dose_full, MmaxA, MminA, t, c, slack_max, slack_min)
 #tempo, custo, solution = build_BATD_exact(Dmax, Dmin, matriz_dose_full, Mmax, Mmin, t, c)
+for i in range(num_pencil_beams):
+    t[i] = t[i].solution_value
 
-'''
-tempo, custo, solution = resolve_tecido(Dmax, Dmin, matriz_dose_full, Mmax, Mmin, t, c, 0)
-plt.scatter(label_t,tempo, color='red', label = 'Uretra')
-del tempo, custo, solution
-
-tempo, custo, solution = resolve_tecido(Dmax, Dmin, matriz_dose_full, Mmax, Mmin, t, c, 1)
-plt.scatter(label_t,tempo, color='green', label = 'Reto')
-del tempo, custo, solution
-
-tempo, custo, solution = resolve_tecido(Dmax, Dmin, matriz_dose_full, Mmax, Mmin, t, c, 2)
-plt.scatter(label_t,tempo, color='blue', label = 'Bexiga')
-del tempo, custo, solution
-
-tempo, custo, solution = resolve_tecido(Dmax, Dmin, matriz_dose_full, Mmax, Mmin, t, c, 3)
-plt.scatter(label_t,tempo, color='orange', label = 'Próstata')
-del tempo, custo, solution
-
-tempo, custo, solution = resolve_tecido(Dmax, Dmin, matriz_dose_full, Mmax, Mmin, t, c, 4)
-plt.scatter(label_t,tempo, color='black', label = 'Bexiga Parcial')
-del tempo, custo, solution
-
-tempo, custo, solution = resolve_tecido(Dmax, Dmin, matriz_dose_full, Mmax, Mmin, t, c, 5)
-plt.scatter(label_t,tempo, color='yellow', label = 'Reto Parcial')
-del tempo, custo, solution
-
-tempo, custo, solution = resolve_tecido(Dmax, Dmin, matriz_dose_full, Mmax, Mmin, t, c, 6)
-plt.scatter(label_t,tempo, color='brown', label = 'Tecido Saudavel')
-'''
-#tempo, custo, solution = resolve_tecido(Dmax, Dmin, matriz_dose_full, Mmax, Mmin, t, c, 0)
-
-
-#plota_dose(matriz_dose_full,t)
-
-
+plota_dose(matriz_dose_full,t,caso)
 #plota_custo(custo)
 
 del c,c_ure,c_rec_part,c_blad_part,c_prostate,c_blad,c_rec,c_naoesp
@@ -832,16 +513,12 @@ if solution:
     print(mdl.print_solution())
 else:
     print("Não tem Solução")
-
-for i in range(num_pencil_beams):
-    tempo[i] = tempo[i].solution_value
-    
    
 for i in range(len(custo)):
     for j in range(len(custo[i])):
         custo[i][j] = custo[i][j].solution_value
 
-plota_tempo(tempo)
+#plota_tempo(tempo)
 
 finalTime = time.time()
 print("Tempo de final = %d" %finalTime)
